@@ -53,6 +53,9 @@ const eventSchema = new mongoose.Schema({
         type: String,
         required: true, 
     },
+    eventPhoto:{
+        type: String,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

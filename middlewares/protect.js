@@ -24,7 +24,7 @@ const protect = async (req, res, next) => {
 
         // Attach user to request object
         req.user = await User.findById(decoded.id).select('-password'); // Excluding password from response
-        console.log(req.user);
+        // console.log(req.user);
 
         next(); // Proceed to the next middleware or route handler
     } catch (error) {

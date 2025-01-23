@@ -1,8 +1,17 @@
 const Event = require('../model/Event');
+const mongoose = require('mongoose');
+const Ticket = require('../model/Ticket');
+const Notification = require('../model/Notification');
+const uploadOnCloudinary = require('../utils/cloudinary');
+
 
 
 const createEvent = async (req, res) => {
     const { name, description, date, time, location, price, discount, totalSeats } = req.body;
+
+    const eventPhotoPath = req.file ? req.file.path : null;
+
+    const eventCloudinaryRes = await uploadOnCloudinary(eventPhotoPath);
 
     try {
         const newEvent = new Event({
@@ -16,6 +25,7 @@ const createEvent = async (req, res) => {
             totalSeats,
             createdBy: req.user._id,
             organizerName: req.user.name,
+            eventPhoto: eventCloudinaryRes.url,
         });
 
         await newEvent.save();
@@ -51,6 +61,7 @@ const getEventDetailsById = async (req, res) => {
             bookedSeats: event.bookedSeats,
             organizerName: event.organizerName,
             availableSeats,
+            eventPhoto: event.eventPhoto,
         });
     } catch (error) {
         console.error(error);
@@ -84,13 +95,9 @@ const getAllEvents = async (req, res) => {
 
 const updateEvent = async (req, res) => {
     const eventId = req.params.id;
-    const userId = req.user._id; 
-
-    // console.log("printing user id",userId);
-    // console.log("printing event organizer id",eventId.createdBy);
+    const userId = req.user._id;
 
     try {
-     
         const event = await Event.findById(eventId);
 
         if (!event) {
@@ -109,9 +116,27 @@ const updateEvent = async (req, res) => {
             { new: true, runValidators: true } // Return updated document and validate input
         );
 
+        // Notify ticket holders
+        const tickets = await Ticket.find({ eventId: eventId });
+        const ticketHolders = tickets.map((ticket) => ticket.userId.toString());
+
+        console.log("Ticket Holder : ", ticketHolders);
+       
+
+        if (ticketHolders.length === 0) {
+            console.log("No ticket holder found");
+        } else {
+            console.log('Number of ticket holders found:', ticketHolders.length);
+
+           
+
+        }
+
         res.status(200).json({
             message: 'Event updated successfully',
             updatedEvent,
+            ticketHolders,
+            numberOfTicketHolders: ticketHolders.length,
         });
     } catch (error) {
         console.error(error);
@@ -144,22 +169,32 @@ const deleteEvent = async (req, res) => {
     }
 };
 
-const getOrganizerEvents = async (req, res) => {
+const getOrgEvents = async (req, res) => {
+    console.log("get organizer events called");
     const userId = req.user._id;
+    console.log("printing user Id",userId);
 
     try {
+        // Find all events created by the logged-in organizer (user)
         const events = await Event.find({ createdBy: userId });
 
-        if (!events.length) {
+        if (!events || events.length === 0) {
             return res.status(404).json({ message: 'No events found for this organizer' });
         }
 
-        res.status(200).json({ events });
+        res.status(200).json({
+            message: 'Events retrieved successfully',
+            events,
+        });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error fetching organizer events' });
+        res.status(500).json({ message: 'Error fetching events for the organizer' });
     }
 };
+
+
+
+
 
 
 module.exports = {
@@ -168,7 +203,7 @@ module.exports = {
     getAllEvents,
     updateEvent,
     deleteEvent,
-    getOrganizerEvents
+    getOrgEvents
     
 };
  
