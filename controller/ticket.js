@@ -1,10 +1,14 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
 const Event = require("../model/Event");
 const Ticket = require("../model/Ticket");
+require('dotenv').config();
 
-const bookTicket = async (req, res) => {
+
+const CanbookTicket = async (req, res) => {
   const { eventId, quantity } = req.body;
   const userId = req.user._id;
 
@@ -16,71 +20,70 @@ const bookTicket = async (req, res) => {
   session.startTransaction();
 
   try {
-    // Find the event and check for available seats
+ 
     const event = await Event.findById(eventId).session(session);
+    // console.log("printing event", event);
 
     if (!event) {
-      // Abort the transaction if the event is not found
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({ message: "Event not found" });
     }
 
-    // Check if there are enough available seats
+  
     const availableSeats = event.totalSeats - event.bookedSeats;
     if (availableSeats < quantity) {
-      // Abort transaction if not enough seats are available
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ message: "Not enough seats available" });
     }
 
-    // Create a new ticket document (Initially marked as 'pending' before payment)
+
     const newTicket = new Ticket({
-      eventId,
-      userId,
-      quantity,
-      totalPrice: ((event.price * (100 - event.discount)) / 100) * quantity,
-      status: "pending", // Ticket is initially pending before payment
+      eventId: eventId,
+      userId: userId,
+      quantity: quantity,
+      totalPrice: (event.price * (100 - event.discount) / 100) * quantity,
     });
 
-    // save the ticket in the database (status is 'pending')
-    await newTicket.save({ session });
+    await newTicket.save();
 
-    // Lock the event and update the bookedSeats
-    event.bookedSeats += quantity;
+    const ticketId = newTicket._id;
 
-    // Save the updated event
-    await event.save({ session });
+    console.log("ticket Id from checkout", ticketId);
 
-    //  Commit the transaction (for the initial booking)
-    await session.commitTransaction();
-    session.endSession();
 
-    //  Call payment gateway to process the payment
-    // const paymentSuccess = await processPayment(totalPrice);
-    const paymentSuccess = true;
 
-    if (paymentSuccess) {
-      //  If payment is successful, update the ticket status to 'confirmed'
-      newTicket.status = "confirmed";
-      await newTicket.save(); // Save the updated ticket
-
-      //  Respond with success and ticket details
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_API_KEY,
+      key_secret: process.env.RAZORPAY_SECRET_KEY,
+    });
+  
+    const orderOptions = {
+      amount: Math.floor(((event.price * (100 - event.discount)) / 100) * quantity * 100), // in paise
+      currency: 'INR',
+      receipt: `ticket_${ticketId}`,
+      payment_capture: 1, // Automatically capture the payment
+    };
+  
+    try {
+      const razorpayOrder = await razorpay.orders.create(orderOptions);
+      console.log("printing order", razorpayOrder);
+  
+      // Send the Razorpay order ID and other payment details to the frontend
       return res.status(200).json({
-        message: "Ticket booked successfully and payment confirmed.",
-        ticket: newTicket,
+        message: "Payment initiated, please complete the payment.",
+        razorpayOrderId: razorpayOrder.id,
+        razorpayKeyId: process.env.RAZORPAY_API_KEY, // Send the key ID to frontend for payment
+        ticketId: ticketId,
       });
-    } else {
-      // If payment fails, you can choose to leave the status as 'pending' or cancel the booking.
-      // Optionally, you can delete the ticket or perform other actions.
-
-      // For now, we leave the ticket status as 'pending'
-      return res.status(400).json({
-        message: "Payment failed, your booking is still pending.",
-        ticket: newTicket,
-      });
+  
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ message: "Error creating Razorpay order" });
     }
+
+ 
   } catch (error) {
     // If an error occurs, abort the transaction
     console.error(error);
@@ -90,11 +93,80 @@ const bookTicket = async (req, res) => {
   }
 };
 
+const verifyPaymentAndBookTicket = async (req, res) => {
+
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature, ticketId } = req.body;
+  console.log("req.body  ", req.body);  
+  const userId = req.user._id;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const ticket = await Ticket.findById(ticketId).session(session);
+    console.log("ticket : ",ticket)
+
+    if (ticket==null || !ticket) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    if (ticket.userId.toString() !== userId.toString()) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({ message: "You are not authorized to book this ticket" });
+    }
+
+    const event = await Event.findById(ticket.eventId).session(session);
+    console.log("event : ",event)
+
+    if (!event) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const generatedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_SECRET_KEY)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (generatedSignature !== razorpay_signature) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Payment verification failed" });
+    }
+
+    ticket.status = 'confirmed';
+    ticket.paymentId = razorpay_payment_id;
+    ticket.paymentSignature = razorpay_signature;
+    ticket.paymentDate = new Date();
+
+    event.bookedSeats += ticket.quantity;
+
+    await ticket.save();
+    await event.save();
+
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log("payment successfulllll and booked ticket : ", ticket)
+    res.status(200).json({ message: "Ticket booked successfully" });
+
+  } catch (error) {
+    console.error(error);
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: "Error booking ticket" });
+  }
+}
+
 const getTickets = async (req, res) => {
   const userId = req.user._id;
 
   try {
     const tickets = await Ticket.find({ userId: userId })
+      .sort({ createdAt: -1 }) // Sort tickets by creation date in descending order
       .populate("eventId", "name date time location") // Populate event details
       .populate("userId", "name email") // Populate user details
       .exec();
@@ -158,7 +230,8 @@ const CancelTicket = async (req, res) => {
 };
 
 module.exports = {
-  bookTicket,
+  CanbookTicket,
+  verifyPaymentAndBookTicket,
   getTickets,
   CancelTicket
 };

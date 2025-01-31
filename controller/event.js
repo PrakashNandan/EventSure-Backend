@@ -70,22 +70,38 @@ const getEventDetailsById = async (req, res) => {
 };
 
 const getAllEvents = async (req, res) => {
-    const { page_number = 1, limit = 10 } = req.query;
+    const { page_number = 1, limit = 10, location } = req.query;
     const page = parseInt(page_number);
     const limitPerPage = parseInt(limit);
 
     try {
-        const events = await Event.find()
-            .skip((page - 1) * limitPerPage)
-            .limit(limitPerPage);
+
+        const allLocations = await Event.find().distinct('location');
+
+        let events;
+        if (location) {
+            events = await Event.find({ location: location })
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limitPerPage)
+                .limit(limitPerPage);
+
+        } else {
+            events = await Event.find()
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limitPerPage)
+                .limit(limitPerPage);
+        }
+  
 
         const totalEvents = await Event.countDocuments();
+
 
         res.status(200).json({
             events,
             totalEvents,
             totalPages: Math.ceil(totalEvents / limitPerPage),
             currentPage: page,
+            allLocations
         });
     } catch (error) {
         console.error(error);
@@ -127,8 +143,6 @@ const updateEvent = async (req, res) => {
             console.log("No ticket holder found");
         } else {
             console.log('Number of ticket holders found:', ticketHolders.length);
-
-           
 
         }
 
@@ -176,7 +190,7 @@ const getOrgEvents = async (req, res) => {
 
     try {
         // Find all events created by the logged-in organizer (user)
-        const events = await Event.find({ createdBy: userId });
+        const events = await Event.find({ createdBy: userId }).sort({ createdAt: -1 });
 
         if (!events || events.length === 0) {
             return res.status(404).json({ message: 'No events found for this organizer' });
@@ -195,15 +209,13 @@ const getOrgEvents = async (req, res) => {
 
 
 
-
-
 module.exports = {
     createEvent,
     getEventDetailsById,
     getAllEvents,
     updateEvent,
     deleteEvent,
-    getOrgEvents
+    getOrgEvents,
     
 };
  

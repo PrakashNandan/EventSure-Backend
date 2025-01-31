@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.post('/create', upload.single('eventPhoto') ,createEvent)
       .get('/getorgevents', getOrgEvents)
+
       .get('/:id', getEventDetailsById)
       .get('/', getAllEvents)
       .patch('/:id', updateEvent)
