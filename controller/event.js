@@ -2,16 +2,16 @@ const Event = require('../model/Event');
 const mongoose = require('mongoose');
 const Ticket = require('../model/Ticket');
 const Notification = require('../model/Notification');
-const uploadOnCloudinary = require('../utils/cloudinary');
+const {streamUpload} = require('../utils/cloudinary');
 
 
 
 const createEvent = async (req, res) => {
     const { name, description, date, time, location, price, discount, totalSeats } = req.body;
 
-    const eventPhotoPath = req.file ? req.file.path : null;
+    const bufferFile = req.file ? req.file.buffer : null;
 
-    const eventCloudinaryRes = await uploadOnCloudinary(eventPhotoPath);
+    const eventCloudinaryRes = await streamUpload(bufferFile);
 
     try {
         const newEvent = new Event({

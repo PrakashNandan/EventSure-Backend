@@ -30,4 +30,19 @@ const uploadOnCloudinary = async (localPath) => {
 };
 
 
-module.exports = uploadOnCloudinary;
+const streamUpload = (buffer) => {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "uploads" }, // Upload to Cloudinary folder
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
+      stream.end(buffer); // Send the file buffer directly to Cloudinary
+    });
+  };
+  
+
+
+module.exports = {uploadOnCloudinary, streamUpload};

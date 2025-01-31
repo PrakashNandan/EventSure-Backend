@@ -1,6 +1,6 @@
 const express = require('express');
 const { createEvent, getEventDetailsById, getAllEvents, updateEvent, deleteEvent, getOrgEvents} = require('../controller/event');
-const {upload} = require('../middlewares/multer');
+const upload = require('../middlewares/multer');
 
 
 const router = express.Router();
