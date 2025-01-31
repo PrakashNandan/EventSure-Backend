@@ -1,5 +1,4 @@
 const express = require('express');
-const http = require('http'); 
 const connectDB = require('./config/connectDB');
 const authRouter = require('./route/auth');
 const eventRouter = require('./route/event');
@@ -14,8 +13,7 @@ const Event = require('./model/Event');
 require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app); 
-const port = process.env.PORT || 8000;
+const port = process.env.PORT || 8080;
 
 
 app.use(express.json());
@@ -41,6 +39,6 @@ app.use('/ticket', protect, ticketRouter);
 app.use('/notification', protect, notificationRouter);
 
 
-server.listen(port, () => {
+app.listen(port, () => {
     console.log(`Server is running on PORT:${port}`);
 });
