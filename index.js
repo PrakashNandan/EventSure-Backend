@@ -19,7 +19,7 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cors({
-    origin: 'http://localhost:3000', // Allow the frontend origin
+    origin: 'http://localhost:3001', // Allow the frontend origin
     methods: ['GET', 'POST', 'PUT', 'PATCH','DELETE'],
 }));
 
