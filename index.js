@@ -19,7 +19,7 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cors({
-    origin: 'http://localhost:3001', // Allow the frontend origin
+    origin: ["http://localhost:3001", "https://eventsure.vercel.app", "https://event-sure-frontend-prakash-nandans-projects.vercel.app"],
     methods: ['GET', 'POST', 'PUT', 'PATCH','DELETE'],
 }));
 
