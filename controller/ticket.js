@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const Event = require("../model/Event");
 const Ticket = require("../model/Ticket");
 require('dotenv').config();
+const {redis} = require('../config/redis')
 
 
 const CanbookTicket = async (req, res) => {
@@ -164,6 +165,16 @@ const verifyPaymentAndBookTicket = async (req, res) => {
 const getTickets = async (req, res) => {
   const userId = req.user._id;
 
+  // check for cached tickets
+  console.log("printing user id", userId);
+  const cacheKey = `tickets:${userId}`;
+  const cachedTickets = await redis.get(cacheKey);
+  if (cachedTickets) {
+    console.log("Cache hit for tickets");
+    return res.status(200).json(JSON.parse(cachedTickets));
+  }  
+
+
   try {
     const tickets = await Ticket.find({ userId: userId })
       .sort({ createdAt: -1 }) // Sort tickets by creation date in descending order
@@ -178,11 +189,15 @@ const getTickets = async (req, res) => {
         .json({ message: "No tickets found for this user" });
     }
 
-    // Return the tickets as the response
-    res.status(200).json({
+    const res = {
       message: "Tickets retrieved successfully",
       tickets: tickets,
-    });
+    }
+
+    await redis.set(cacheKey, JSON.stringify(res), 'EX', 600); // Cache the tickets for 10 minutes
+
+    // Return the tickets as the response
+    res.status(200).json(res);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error retrieving tickets" });
@@ -221,6 +236,8 @@ const CancelTicket = async (req, res) => {
      }
 
     await Ticket.findByIdAndDelete(ticketId);
+
+    await redis.del(`tickets:${userId}`); // Invalidate cache for this user's tickets
 
     res.status(200).json({ message: "Ticket cancelled successfully, Refund will process in few days" });
   } catch (error) {

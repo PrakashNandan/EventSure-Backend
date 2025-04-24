@@ -4,6 +4,10 @@ const Ticket = require('../model/Ticket');
 const Notification = require('../model/Notification');
 const {streamUpload} = require('../utils/cloudinary');
 
+const { getSocketInstance } = require('../socket');
+const {redis} = require('../config/redis');
+
+
 
 
 const createEvent = async (req, res) => {
@@ -28,8 +32,16 @@ const createEvent = async (req, res) => {
             eventPhoto: eventCloudinaryRes.url,
         });
 
+          // Invalidate cache
+          const keys = await redis.keys('events:*');
+          if (keys.length > 0) await redis.del(...keys);
+
         await newEvent.save();
         res.status(201).json({ message: 'Event created successfully', event: newEvent });
+
+        
+
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error creating event' });
@@ -74,6 +86,15 @@ const getAllEvents = async (req, res) => {
     const page = parseInt(page_number);
     const limitPerPage = parseInt(limit);
 
+    const cacheKey = `events:${page}-${limit}-${location}`;
+    const isExist = await redis.exists(cacheKey);
+    if (isExist) {
+        console.log("Cache hit for events data");
+        const cachedEvents = await redis.get(cacheKey);
+        return res.status(200).json(JSON.parse(cachedEvents));
+    }
+
+
     try {
 
         const allLocations = await Event.find().distinct('location');
@@ -94,6 +115,14 @@ const getAllEvents = async (req, res) => {
   
 
         const totalEvents = await Event.countDocuments();
+
+        await redis.set(cacheKey, JSON.stringify({
+            events,
+            totalEvents,
+            totalPages: Math.ceil(totalEvents / limitPerPage),
+            currentPage: page,
+            allLocations
+        }), 'EX', 600); // expires in 10 minutes
 
 
         res.status(200).json({
@@ -134,23 +163,54 @@ const updateEvent = async (req, res) => {
 
         // Notify ticket holders
         const tickets = await Ticket.find({ eventId: eventId });
-        const ticketHolders = tickets.map((ticket) => ticket.userId.toString());
 
-        console.log("Ticket Holder : ", ticketHolders);
+       // Create notifications and emit events
+        const notifications = tickets.map(ticket => {
+            const message = `The event "${updatedEvent.name}" has been updated.`;
+
+
+            // Get Socket.io instance safely
+            const io = getSocketInstance();
+            if (io) {
+                tickets.forEach(ticket => {
+                    const userId = ticket.userId.toString();
+                    console.log(`Emitting event update to userId: ${userId}`);
+                    io.to(userId).emit('eventUpdate', {
+                        message: `Event "${event.name}" has been updated.`,
+                        eventId: event._id
+                    });
+
+                    // io.emit('eventUpdate', {
+                    //     message: `Event "${event.name}" has been updated.`,
+                    //     eventId: event._id
+                    // });
+                });
+                console.log("📢 Event update notification sent to ticket holders.");
+            } else {
+                console.log("⚠️ Socket.io is not initialized yet");
+            }
+    
+            return {
+            userId: ticket.userId,
+            type:'update',
+            eventId,
+            message,
+            };
+        });
+  
+      // Save notifications to the database
+      await Notification.insertMany(notifications);
+
+
+      // Invalidate cache
+      const keys = await redis.keys('events:*');
+      if (keys.length > 0) await redis.del(...keys);
        
-
-        if (ticketHolders.length === 0) {
-            console.log("No ticket holder found");
-        } else {
-            console.log('Number of ticket holders found:', ticketHolders.length);
-
-        }
 
         res.status(200).json({
             message: 'Event updated successfully',
             updatedEvent,
-            ticketHolders,
-            numberOfTicketHolders: ticketHolders.length,
+            numberOfTicketHolders: tickets.length,
         });
     } catch (error) {
         console.error(error);
@@ -176,6 +236,10 @@ const deleteEvent = async (req, res) => {
 
         await Event.findByIdAndDelete(eventId);
 
+        // Invalidate cache
+        const keys = await redis.keys('events:*');
+        if (keys.length > 0) await redis.del(...keys);
+
         res.status(200).json({ message: 'Event deleted successfully' });
     } catch (error) {
         console.error(error);
@@ -186,20 +250,31 @@ const deleteEvent = async (req, res) => {
 const getOrgEvents = async (req, res) => {
     console.log("get organizer events called");
     const userId = req.user._id;
-    console.log("printing user Id",userId);
+    console.log("printing user Id", userId);
+
+    const cacheKey = `events:org:${userId}`;
+    const isExist = await redis.exists(cacheKey);
+    if (isExist) {
+        console.log("Cache hit for organizer events data");
+        const cachedEvents = await redis.get(cacheKey);
+        return res.status(200).json(JSON.parse(cachedEvents));
+    }
 
     try {
-        // Find all events created by the logged-in organizer (user)
         const events = await Event.find({ createdBy: userId }).sort({ createdAt: -1 });
 
         if (!events || events.length === 0) {
-            return res.status(404).json({ message: 'No events found for this organizer' });
+            return res.status(200).json({ message: 'No events found for this organizer', events: [] });
         }
 
-        res.status(200).json({
+        const response = {
             message: 'Events retrieved successfully',
             events,
-        });
+        };
+
+        await redis.set(cacheKey, JSON.stringify(response), 'EX', 600); // cache for 10 mins
+
+        res.status(200).json(response);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error fetching events for the organizer' });

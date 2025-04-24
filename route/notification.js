@@ -1,11 +1,11 @@
 const express = require('express');
-const { createNotification, getTicketHolderNotifications } = require('../controller/notification');
+const { createNotification, getTicketHolderNotifications, getNotification } = require('../controller/notification');
 
 
 const router = express.Router();
 
 router.post('/create', createNotification)
-        .get('/', getTicketHolderNotifications)
+        .get('/', getNotification)
 
 
         
