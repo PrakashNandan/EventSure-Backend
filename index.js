@@ -18,7 +18,7 @@ const http = require('http');
 const app = express();
 const port = process.env.PORT || 8080;
 
-const server = http.createServer(app);
+// const server = http.createServer(app);
 // initializeSocket(server); // Initialize socket here
 
 
@@ -49,7 +49,7 @@ app.use('/notification', protect, notificationRouter);
 
 
 
-server.listen(port, () => {
+app.listen(port, () => {
     console.log(`Server is running on PORT:${port}`);
 });
 
