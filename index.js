@@ -12,14 +12,14 @@ const Ticket = require('./model/Ticket');
 const Event = require('./model/Event');
 require('dotenv').config();
 const http = require('http');
-const { initializeSocket } = require('./socket');
+// const { initializeSocket } = require('./socket');
 
 
 const app = express();
 const port = process.env.PORT || 8080;
 
 const server = http.createServer(app);
-initializeSocket(server); // Initialize socket here
+// initializeSocket(server); // Initialize socket here
 
 
 

@@ -4,7 +4,7 @@ const Ticket = require('../model/Ticket');
 const Notification = require('../model/Notification');
 const {streamUpload} = require('../utils/cloudinary');
 
-const { getSocketInstance } = require('../socket');
+// const { getSocketInstance } = require('../socket');
 const {redis} = require('../config/redis');
 
 
@@ -170,25 +170,25 @@ const updateEvent = async (req, res) => {
 
 
             // Get Socket.io instance safely
-            const io = getSocketInstance();
-            if (io) {
-                tickets.forEach(ticket => {
-                    const userId = ticket.userId.toString();
-                    console.log(`Emitting event update to userId: ${userId}`);
-                    io.to(userId).emit('eventUpdate', {
-                        message: `Event "${event.name}" has been updated.`,
-                        eventId: event._id
-                    });
+            // const io = getSocketInstance();
+            // if (io) {
+            //     tickets.forEach(ticket => {
+            //         const userId = ticket.userId.toString();
+            //         console.log(`Emitting event update to userId: ${userId}`);
+            //         io.to(userId).emit('eventUpdate', {
+            //             message: `Event "${event.name}" has been updated.`,
+            //             eventId: event._id
+            //         });
 
-                    // io.emit('eventUpdate', {
-                    //     message: `Event "${event.name}" has been updated.`,
-                    //     eventId: event._id
-                    // });
-                });
-                console.log("📢 Event update notification sent to ticket holders.");
-            } else {
-                console.log("⚠️ Socket.io is not initialized yet");
-            }
+            //         // io.emit('eventUpdate', {
+            //         //     message: `Event "${event.name}" has been updated.`,
+            //         //     eventId: event._id
+            //         // });
+            //     });
+            //     console.log("📢 Event update notification sent to ticket holders.");
+            // } else {
+            //     console.log("⚠️ Socket.io is not initialized yet");
+            // }
     
             return {
             userId: ticket.userId,
