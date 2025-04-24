@@ -53,7 +53,7 @@ server.listen(port, () => {
     console.log(`Server is running on PORT:${port}`);
 });
 
-module.exports={app, server};
+// module.exports={app, server};
 
 
 
