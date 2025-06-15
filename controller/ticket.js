@@ -151,6 +151,8 @@ const verifyPaymentAndBookTicket = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+     await redis.del(`tickets:${userId}`);
+
     console.log("payment successfulllll and booked ticket : ", ticket)
     res.status(200).json({ message: "Ticket booked successfully" });
 
@@ -177,12 +179,12 @@ const getTickets = async (req, res) => {
 
   try {
     const tickets = await Ticket.find({ userId: userId })
-      .sort({ createdAt: -1 }) // Sort tickets by creation date in descending order
-      .populate("eventId", "name date time location") // Populate event details
-      .populate("userId", "name email") // Populate user details
+      .sort({ createdAt: -1 }) 
+      .populate("eventId", "name date time location") // Populating event details
+      .populate("userId", "name email") // Populating user details
       .exec();
 
-    // If no tickets are found, return a 404 response
+
     if (tickets.length === 0) {
       return res
         .status(404)
@@ -194,9 +196,8 @@ const getTickets = async (req, res) => {
       tickets: tickets,
     }
 
-    await redis.set(cacheKey, JSON.stringify(res), 'EX', 600); // Cache the tickets for 10 minutes
+    await redis.set(cacheKey, JSON.stringify(res), 'EX', 100); 
 
-    // Return the tickets as the response
     res.status(200).json(res);
   } catch (error) {
     console.error(error);

@@ -1,5 +1,6 @@
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
+const streamifier = require('streamifier');
 
 
 cloudinary.config({ 
@@ -29,20 +30,23 @@ const uploadOnCloudinary = async (localPath) => {
     }
 };
 
-
 const streamUpload = (buffer) => {
-    return new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: "uploads" }, // Upload to Cloudinary folder
-        (error, result) => {
-          if (error) return reject(error);
-          resolve(result);
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'uploads' },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary Error:", error);
+          return reject(error);
         }
-      );
-      stream.end(buffer); // Send the file buffer directly to Cloudinary
-    });
-  };
-  
+        resolve(result);
+      }
+    );
+
+    // This fixes the AggregateError!
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
 
 
 module.exports = {uploadOnCloudinary, streamUpload};

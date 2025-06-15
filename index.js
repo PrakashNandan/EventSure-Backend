@@ -4,6 +4,7 @@ const authRouter = require('./route/auth');
 const eventRouter = require('./route/event');
 const ticketRouter = require('./route/ticket');
 const notificationRouter = require('./route/notification');
+const adminRouter = require('./route/admin');
 const protect = require('./middlewares/protect');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -12,14 +13,14 @@ const Ticket = require('./model/Ticket');
 const Event = require('./model/Event');
 require('dotenv').config();
 const http = require('http');
-const { initializeSocket } = require('./socket');
+// const { initializeSocket } = require('./socket');
 
 
 const app = express();
 const port = process.env.PORT || 8080;
 
 const server = http.createServer(app);
-initializeSocket(server); // Initialize socket here
+// initializeSocket(server); // Initialize socket here
 
 
 
@@ -44,6 +45,7 @@ app.use('/auth', authRouter);
 app.use('/event', protect, eventRouter);
 app.use('/ticket', protect, ticketRouter);
 app.use('/notification', protect, notificationRouter);
+app.use('/admin', protect,adminRouter);
 
 
 

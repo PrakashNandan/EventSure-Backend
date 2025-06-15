@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const signup = async (req, res) => {
-    const { name, email, address, pincode, password } = req.body;
+    const { name, email, address, pincode, password, role } = req.body;
 
     try {
         const userExists = await User.findOne({ email });
@@ -20,14 +20,15 @@ const signup = async (req, res) => {
             address,
             pincode,
             password: hashedPassword,
+            role: role || 'user' // Default to 'user' if no role is provided
         });
 
         await newUser.save();
 
-        res.status(201).json({ message: 'User registered successfully' });
+        res.status(201).json({ message: 'registration successfully' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error registering user' });
+        res.status(500).json({ message: 'Error registering' });
     }
 };
 
@@ -45,12 +46,13 @@ const login = async (req, res) => {
             return res.status(400).json({ message: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        const token = jwt.sign({ id: user._id, role: user.role  }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
         res.status(200).json({
             message: 'Login successful',
             token,
-            userId: user._id
+            userId: user._id,
+            role: user.role
         });
     } catch (error) {
         console.error(error);
