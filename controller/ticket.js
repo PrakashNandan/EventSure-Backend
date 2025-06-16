@@ -191,14 +191,14 @@ const getTickets = async (req, res) => {
         .json({ message: "No tickets found for this user" });
     }
 
-    const res = {
+    const result = {
       message: "Tickets retrieved successfully",
       tickets: tickets,
     }
 
-    await redis.set(cacheKey, JSON.stringify(res), 'EX', 100); 
+    await redis.set(cacheKey, JSON.stringify(result), 'EX', 100); 
 
-    res.status(200).json(res);
+    res.status(200).json(result);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error retrieving tickets" });

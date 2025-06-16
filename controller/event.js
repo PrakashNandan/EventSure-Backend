@@ -291,12 +291,15 @@ const getOrgEvents = async (req, res) => {
 const getMetaDataOfEvents = async (req, res) => {
   try {
     const userId = req.user._id;
-    const totalEvents = await Event.countDocuments({createdBy: userId });
-    const latestEvent = await Event.findOne().sort({ createdAt: -1 });
 
-     const upcomingEventsList = await Event.find({
-      date: { $gt: new Date() }
-    }).sort({ date: 1 }); // soonest first
+    const totalEvents = await Event.countDocuments({ createdBy: userId });
+
+    const latestEvent = await Event.findOne({ createdBy: userId }).sort({ createdAt: -1 });
+
+    const upcomingEventsList = await Event.find({
+      createdBy: userId,
+      date: { $gt: new Date() },
+    }).sort({ date: 1 });
 
     const upcomingEventsCount = upcomingEventsList.length;
 
