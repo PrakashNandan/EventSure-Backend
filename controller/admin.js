@@ -31,7 +31,7 @@ const getAllEvents = async (req, res) => {
         const total = await Event.countDocuments();
 
         const events = await Event.find()
-            .sort({ date: -1 })
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
             .populate('createdBy', 'name email');
