@@ -6,18 +6,34 @@ const {streamUpload} = require('../utils/cloudinary');
 
 // const { getSocketInstance } = require('../socket');
 const {redis} = require('../config/redis');
+const User = require('../model/User');
 
 
 
 
 const createEvent = async (req, res) => {
-    const { name, description, date, time, location, price, discount, totalSeats } = req.body;
 
-    const bufferFile = req.file ? req.file.buffer : null;
 
-    const eventCloudinaryRes = await streamUpload(bufferFile);
+     try {
+        const { name, description, date, time, location, price, discount, totalSeats } = req.body;
 
-    try {
+        if (!name || !date || !location) {
+                return res.status(400).json({ message: "Missing required fields" });
+            }
+
+        let eventPhotoUrl = "";
+
+        // Upload only if a file was sent
+        if (req.file && req.file.buffer) {
+            try {
+                const eventCloudinaryRes = await streamUpload(req.file.buffer);
+                eventPhotoUrl = eventCloudinaryRes.url || "";
+            } catch (uploadError) {
+                console.error("Cloudinary Upload Failed:", uploadError);
+                return res.status(500).json({ message: "Event image upload failed" });
+            }
+        }
+   
         const newEvent = new Event({
             name,
             description,
@@ -29,7 +45,7 @@ const createEvent = async (req, res) => {
             totalSeats,
             createdBy: req.user._id,
             organizerName: req.user.name,
-            eventPhoto: eventCloudinaryRes.url,
+            eventPhoto:  eventPhotoUrl,
         });
 
           // Invalidate cache
@@ -37,7 +53,7 @@ const createEvent = async (req, res) => {
           if (keys.length > 0) await redis.del(...keys);
 
         await newEvent.save();
-        res.status(201).json({ message: 'Event created successfully', event: newEvent });
+        res.status(201).json({  message: `Event created `, event: newEvent });
 
         
 
@@ -86,7 +102,7 @@ const getAllEvents = async (req, res) => {
     const page = parseInt(page_number);
     const limitPerPage = parseInt(limit);
 
-    const cacheKey = `events:${page}-${limit}-${location}`;
+    const cacheKey = `events:${page}-${limit}-${location || 'all'}`;
     const isExist = await redis.exists(cacheKey);
     if (isExist) {
         console.log("Cache hit for events data");
@@ -94,47 +110,36 @@ const getAllEvents = async (req, res) => {
         return res.status(200).json(JSON.parse(cachedEvents));
     }
 
-
     try {
+        const filter = { status: "approved" }; 
 
-        const allLocations = await Event.find().distinct('location');
-
-        let events;
         if (location) {
-            events = await Event.find({ location: location })
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * limitPerPage)
-                .limit(limitPerPage);
-
-        } else {
-            events = await Event.find()
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * limitPerPage)
-                .limit(limitPerPage);
+            filter.location = location; 
         }
-  
 
-        const totalEvents = await Event.countDocuments();
+        const events = await Event.find(filter)
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limitPerPage)
+            .limit(limitPerPage);
 
-        await redis.set(cacheKey, JSON.stringify({
+        const totalEvents = await Event.countDocuments(filter); 
+
+        const allLocations = await Event.find({ status: "approved" }).distinct("location");
+
+        const responseData = {
             events,
             totalEvents,
             totalPages: Math.ceil(totalEvents / limitPerPage),
             currentPage: page,
-            allLocations
-        }), 'EX', 600); // expires in 10 minutes
+            allLocations,
+        };
 
+        await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 1); 
 
-        res.status(200).json({
-            events,
-            totalEvents,
-            totalPages: Math.ceil(totalEvents / limitPerPage),
-            currentPage: page,
-            allLocations
-        });
+        return res.status(200).json(responseData);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error fetching events' });
+        return res.status(500).json({ message: 'Error fetching events' });
     }
 };
 
@@ -208,7 +213,7 @@ const updateEvent = async (req, res) => {
        
 
         res.status(200).json({
-            message: 'Event updated successfully',
+            message: `Event updated by ${req.user.name} (${req.user.role})`,
             updatedEvent,
             numberOfTicketHolders: tickets.length,
         });
@@ -240,7 +245,7 @@ const deleteEvent = async (req, res) => {
         const keys = await redis.keys('events:*');
         if (keys.length > 0) await redis.del(...keys);
 
-        res.status(200).json({ message: 'Event deleted successfully' });
+        res.status(200).json({message: `Event deleted by ${req.user.name} (${req.user.role})`});
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error deleting event' });
@@ -283,6 +288,51 @@ const getOrgEvents = async (req, res) => {
 
 
 
+const getMetaDataOfEvents = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const totalEvents = await Event.countDocuments({ createdBy: userId });
+
+    const latestEvent = await Event.findOne({ createdBy: userId }).sort({ createdAt: -1 });
+
+    const upcomingEventsList = await Event.find({
+      createdBy: userId,
+      date: { $gt: new Date() },
+    }).sort({ date: 1 });
+
+    const upcomingEventsCount = upcomingEventsList.length;
+
+    let totalTicketsBookedInLatestEvent = 0;
+
+    if (latestEvent) {
+      const tickets = await Ticket.aggregate([
+        { $match: { eventId: latestEvent._id } },
+        {
+          $group: {
+            _id: null,
+            totalQuantity: { $sum: "$quantity" },
+          },
+        },
+      ]);
+
+      totalTicketsBookedInLatestEvent = tickets.length > 0 ? tickets[0].totalQuantity : 0;
+    }
+
+    res.status(200).json({
+      totalEvents,
+      upcomingEventsList,
+      upcomingEventsCount,
+      totalTicketsBookedInLatestEvent,
+    });
+
+  } catch (error) {
+    console.error("Error fetching metadata:", error);
+    res.status(500).json({ message: 'Internal server error while fetching metadata' });
+  }
+};
+
+
 
 module.exports = {
     createEvent,
@@ -291,6 +341,7 @@ module.exports = {
     updateEvent,
     deleteEvent,
     getOrgEvents,
+    getMetaDataOfEvents
     
 };
  

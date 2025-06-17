@@ -11,7 +11,8 @@ const userSchema = new mongoose.Schema({
         required: true,
         unique: true,
         lowercase: true,
-        trim: true
+        trim: true,
+        match: [/.+@.+\..+/, 'Please use a valid email address']
     },
     address: {
         type: String,
@@ -27,6 +28,15 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         minlength: 6
+    },
+    role: {
+        type: String,
+        enum: ['admin', 'organizer', 'user'],
+        default: 'user',
+    },
+    isBanned: {
+        type: Boolean,
+        default: false,
     },
     createdAt: {
         type: Date,

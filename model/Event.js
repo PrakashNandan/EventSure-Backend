@@ -56,6 +56,11 @@ const eventSchema = new mongoose.Schema({
     eventPhoto:{
         type: String,
     },
+    status: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "pending",
+  },
     createdAt: {
         type: Date,
         default: Date.now,
